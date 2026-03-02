@@ -1,14 +1,16 @@
-name: Notion Board to Hashnode Direct
+name: Notion to Hashnode Auto-Frontmatter
 on:
   workflow_dispatch:
   schedule:
     - cron: "0 * * * *"
 
 jobs:
-  sync:
+  sync-and-publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Notion to Markdown
@@ -21,9 +23,23 @@ jobs:
           filter_value: "Done"
           filename_property: "Slug"
 
-      - name: Publish to Hashnode API
-        uses: OmenApps/publish-github-to-hashnode@v2
+      - name: Inject Frontmatter Automatically
+        run: |
+          for file in posts/*.md; do
+            # Get filename without extension to use as Slug
+            slug=$(basename "$file" .md)
+            # Create a temporary file with frontmatter
+            echo "---" > tmp_file
+            echo "title: ${slug//-/ }" >> tmp_file # Replaces dashes with spaces for title
+            echo "slug: $slug" >> tmp_file
+            echo "tags: [\"General\"]" >> tmp_file # Default tag
+            echo "---" >> tmp_file
+            cat "$file" >> tmp_file
+            mv tmp_file "$file"
+          done
+
+      - name: Publish to Hashnode
+        uses: raunakgurud09/hashnode-publish@v2
         with:
-          hashnode-token: ${{ secrets.HASHNODE_TOKEN }}
-          publication-id: ${{ secrets.HASHNODE_PUBLICATION_ID }}
-          source-directory: "posts"
+          hashnode_key: ${{ secrets.HASHNODE_TOKEN }}
+          file: "posts/**/*.md"
