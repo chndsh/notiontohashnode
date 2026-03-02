@@ -35,18 +35,29 @@ jobs:
         if: steps.check_files.outputs.files_found == 'true'
         env:
           HASHNODE_KEY: ${{ secrets.HASHNODE_TOKEN }}
+          PUB_ID: ${{ secrets.HASHNODE_PUBLICATION_ID }}
         run: |
           for file in posts/*.md; do
             slug=$(basename "$file" .md)
-            # 1. Add Frontmatter to the file
-            content=$(cat "$file")
-            echo -e "---\ntitle: ${slug//-/ }\nslug: $slug\ntags: [\"General\"]\n---\n$content" > "$file"
+            # 1. Clean content for JSON (escaping quotes/newlines)
+            content=$(cat "$file" | jq -Rs .)
+            title="${slug//-/ }"
+
+            echo "Publishing $slug to Hashnode..."
             
-            # 2. Publish this specific file using a curl command (Native 2026 API)
-            # This replaces the buggy action with a direct, reliable API call
-            echo "Publishing $slug..."
-            curl -X POST https://api.hashnode.com/ \
+            # 2. Use the NEW 2026 Endpoint (gql.hashnode.com)
+            curl -X POST https://gql.hashnode.com \
               -H "Content-Type: application/json" \
               -H "Authorization: $HASHNODE_KEY" \
-              -d "{\"query\":\"mutation { createBlogPost(publicationId: \\\"${{ secrets.HASHNODE_PUBLICATION_ID }}\\\", input: { title: \\\"${slug//-/ }\\\", contentMarkdown: $(echo "$content" | jq -Rs .), tags: [{ name: \\\"General\\\", slug: \\\"general\\\" }] }) { code message success } }\"}"
+              --data "{
+                \"query\": \"mutation PublishPost(\$input: PublishPostInput!) { publishPost(input: \$input) { post { id url slug } } }\",
+                \"variables\": {
+                  \"input\": {
+                    \"publicationId\": \"$PUB_ID\",
+                    \"title\": \"$title\",
+                    \"contentMarkdown\": $content,
+                    \"slug\": \"$slug\"
+                  }
+                }
+              }"
           done
