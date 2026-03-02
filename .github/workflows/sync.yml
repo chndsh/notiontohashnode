@@ -1,0 +1,29 @@
+name: Notion Board to Hashnode Direct
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Notion to Markdown
+        uses: ega4432/notion-to-markdown-action@v0.4.1
+        with:
+          notion-api-key: ${{ secrets.NOTION_TOKEN }}
+          notion-db-id: ${{ secrets.NOTION_DATABASE_ID }}
+          output_path: "posts"
+          filter_property: "Status"
+          filter_value: "Done"
+          filename_property: "Slug"
+
+      - name: Publish to Hashnode API
+        uses: OmenApps/publish-github-to-hashnode@v2
+        with:
+          hashnode-token: ${{ secrets.HASHNODE_TOKEN }}
+          publication-id: ${{ secrets.HASHNODE_PUBLICATION_ID }}
+          source-directory: "posts"
