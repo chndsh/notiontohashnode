@@ -15,28 +15,24 @@ jobs:
 
       - name: Notion to Markdown
         uses: ega4432/notion-to-markdown-action@v0.4.1
+        env:
+          # This action requires these as ENV variables, not just inputs
+          NOTION_API_KEY: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
         with:
-          notion-api-key: ${{ secrets.NOTION_TOKEN }}
-          notion-db-id: ${{ secrets.NOTION_DATABASE_ID }}
           output_path: "posts"
-          filter_property: "Status"
-          filter_value: "Done"
           filename_property: "Slug"
 
       - name: Inject Frontmatter Automatically
         run: |
-          for file in posts/*.md; do
-            # Get filename without extension to use as Slug
-            slug=$(basename "$file" .md)
-            # Create a temporary file with frontmatter
-            echo "---" > tmp_file
-            echo "title: ${slug//-/ }" >> tmp_file # Replaces dashes with spaces for title
-            echo "slug: $slug" >> tmp_file
-            echo "tags: [\"General\"]" >> tmp_file # Default tag
-            echo "---" >> tmp_file
-            cat "$file" >> tmp_file
-            mv tmp_file "$file"
-          done
+          if [ -d "posts" ]; then
+            for file in posts/*.md; do
+              slug=$(basename "$file" .md)
+              echo -e "---\ntitle: ${slug//-/ }\nslug: $slug\ntags: [\"General\"]\n---\n$(cat "$file")" > "$file"
+            done
+          else
+            echo "No posts found to process."
+          fi
 
       - name: Publish to Hashnode
         uses: raunakgurud09/hashnode-publish@v2
