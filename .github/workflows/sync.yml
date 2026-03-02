@@ -25,25 +25,28 @@ jobs:
       - name: Check if posts exist
         id: check_files
         run: |
-          if [ -d "posts" ] && [ "$(ls -A posts)" ]; then
+          if [ -d "posts" ] && [ "$(ls -A posts/*.md 2>/dev/null)" ]; then
             echo "files_found=true" >> $GITHUB_OUTPUT
           else
             echo "files_found=false" >> $GITHUB_OUTPUT
-            echo "No markdown files found in posts/ directory."
           fi
 
-      - name: Inject Frontmatter
+      - name: Inject Frontmatter and Publish
         if: steps.check_files.outputs.files_found == 'true'
+        env:
+          HASHNODE_KEY: ${{ secrets.HASHNODE_TOKEN }}
         run: |
           for file in posts/*.md; do
             slug=$(basename "$file" .md)
+            # 1. Add Frontmatter to the file
             content=$(cat "$file")
             echo -e "---\ntitle: ${slug//-/ }\nslug: $slug\ntags: [\"General\"]\n---\n$content" > "$file"
+            
+            # 2. Publish this specific file using a curl command (Native 2026 API)
+            # This replaces the buggy action with a direct, reliable API call
+            echo "Publishing $slug..."
+            curl -X POST https://api.hashnode.com/ \
+              -H "Content-Type: application/json" \
+              -H "Authorization: $HASHNODE_KEY" \
+              -d "{\"query\":\"mutation { createBlogPost(publicationId: \\\"${{ secrets.HASHNODE_PUBLICATION_ID }}\\\", input: { title: \\\"${slug//-/ }\\\", contentMarkdown: $(echo "$content" | jq -Rs .), tags: [{ name: \\\"General\\\", slug: \\\"general\\\" }] }) { code message success } }\"}"
           done
-
-      - name: Publish to Hashnode
-        if: steps.check_files.outputs.files_found == 'true'
-        uses: raunakgurud09/hashnode-publish@v2
-        with:
-          hashnode_key: ${{ secrets.HASHNODE_TOKEN }}
-          file: "posts/" # Pointing to the directory
