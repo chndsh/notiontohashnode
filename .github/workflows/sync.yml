@@ -1,11 +1,11 @@
-name: Notion to Hashnode Auto-Frontmatter
+name: Notion to Hashnode Final
 on:
   workflow_dispatch:
   schedule:
     - cron: "0 * * * *"
 
 jobs:
-  sync-and-publish:
+  sync:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -16,26 +16,34 @@ jobs:
       - name: Notion to Markdown
         uses: ega4432/notion-to-markdown-action@v0.4.1
         env:
-          # This action requires these as ENV variables, not just inputs
           NOTION_API_KEY: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
         with:
           output_path: "posts"
           filename_property: "Slug"
 
-      - name: Inject Frontmatter Automatically
+      - name: Check if posts exist
+        id: check_files
         run: |
-          if [ -d "posts" ]; then
-            for file in posts/*.md; do
-              slug=$(basename "$file" .md)
-              echo -e "---\ntitle: ${slug//-/ }\nslug: $slug\ntags: [\"General\"]\n---\n$(cat "$file")" > "$file"
-            done
+          if [ -d "posts" ] && [ "$(ls -A posts)" ]; then
+            echo "files_found=true" >> $GITHUB_OUTPUT
           else
-            echo "No posts found to process."
+            echo "files_found=false" >> $GITHUB_OUTPUT
+            echo "No markdown files found in posts/ directory."
           fi
 
+      - name: Inject Frontmatter
+        if: steps.check_files.outputs.files_found == 'true'
+        run: |
+          for file in posts/*.md; do
+            slug=$(basename "$file" .md)
+            content=$(cat "$file")
+            echo -e "---\ntitle: ${slug//-/ }\nslug: $slug\ntags: [\"General\"]\n---\n$content" > "$file"
+          done
+
       - name: Publish to Hashnode
+        if: steps.check_files.outputs.files_found == 'true'
         uses: raunakgurud09/hashnode-publish@v2
         with:
           hashnode_key: ${{ secrets.HASHNODE_TOKEN }}
-          file: "posts/**/*.md"
+          file: "posts/" # Pointing to the directory
